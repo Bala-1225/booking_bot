@@ -1,26 +1,36 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from bot import BookingBot  # Importing the BookingBot class
+from bot import ask_gpt
 
 # Router
 bot_router = APIRouter()
 
-# GPT-4o-mini LLM simulation (replace with actual LLM integration in production)
-def gpt4o_mini_conversation(user_input: str) -> str:
-    if "booking" in user_input.lower():
-        return "Sure, I can help you with booking slots. Would you like to book for the current quarter or a specific date?"
-    elif "cancel" in user_input.lower():
-        return "Alright, please provide the booking ID or date you'd like to cancel."
-    else:
-        return "I’m here to assist you with booking or canceling office slots. How can I help you today?"
-
-# Chatbot request model
-class UserQuery(BaseModel):
-    query: str
+# Initialize the bot instance
+bot = BookingBot()
 
 # Chatbot response endpoint
 @bot_router.post("/chatbot")
-def chatbot_interaction(user_query: UserQuery):
-    user_input = user_query.query
-    response = gpt4o_mini_conversation(user_input)
-    return JSONResponse(content={"response": response})
+def chatbot_interaction(user_query: dict):
+    """
+    Handles user interactions via the chatbot.
+    Expects input in the format:
+    {
+        "query": "User's input string"
+    }
+    """
+    user_input = user_query.get("query")
+    if not user_input:
+        raise HTTPException(status_code=400, detail="Query input is required.")
+
+    # Add the user's query to the conversation log
+    bot.conversation_log.append({"role": "user", "content": user_input})
+
+    # Ask the bot to generate a response
+    bot_reply = bot.ask_gpt(
+        prompt=user_input,
+        conversation_log=bot.conversation_log,
+    )
+    bot.conversation_log.append({"role": "assistant", "content": bot_reply})
+
+    return JSONResponse(content={"response": bot_reply})
